@@ -1,0 +1,10 @@
+{
+  "name": "cousteau-governance",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "D\u00e9monstrateur de gouvernance humaine pour \u00e9quipes et agents",
+  "scripts": {
+    "test": "node tests/domain.mjs && node tests/render.mjs"
+  }
+}

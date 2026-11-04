@@ -1,0 +1,32 @@
+# Local dependencies and test output
+node_modules/
+coverage/
+playwright-report/
+test-results/
+*.log
+
+# Local environment and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+credentials*.json
+*.credentials.json
+
+# Editor and operating-system files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Temporary exports and deployment packages
+*.tar
+*.tar.gz
+*.tgz
+*.zip
+*.tmp
