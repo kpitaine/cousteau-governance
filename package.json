@@ -1,10 +1,11 @@
 {
   "name": "cousteau-governance",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
   "type": "module",
-  "description": "D\u00e9monstrateur de gouvernance humaine pour \u00e9quipes et agents",
+  "description": "Démonstrateur de gouvernance humaine pour équipes et agents",
   "scripts": {
-    "test": "node tests/domain.mjs && node tests/render.mjs"
-  }
+    "test": "node tests/domain.mjs && node tests/render.mjs && node tests/workflows.mjs && node tests/capabilities.mjs && node tests/governance-plus.mjs && node tests/teams.mjs && node tests/workspace.mjs"
+  },
+  "license": "Apache-2.0"
 }

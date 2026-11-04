@@ -64,11 +64,11 @@ Mesurer attente humaine, coût, qualité acceptée, reprise manuelle, erreurs et
 | Mesures | Provenance des indicateurs, distinction prévision/résultat, coût de supervision humaine |
 | Exploitation | Sauvegarde/restauration, disponibilité, journalisation, alertes et procédure d’incident |
 
-Les tests actuels du dépôt vérifient la logique locale et les vues modulaires. Ils seront conservés, puis complétés par des tests d’API, de contrat, d’intégration Temporal / Mastra, de bout en bout et de sécurité.
+Les sept suites actuelles vérifient la logique locale, les vues modulaires, les versions de graphe, les décisions successives, les droits du valideur, les révocations, les compétences et les migrations. Ils seront conservés, puis complétés par des tests d’API, de contrat, d’intégration Temporal / Mastra, de bout en bout et de sécurité.
 
 ## 8. Étendre après observation
 
-Après un pilote mesuré, ajouter progressivement des processus, outils et équipes. Les extensions possibles comprennent les délégations avec suppléants, la double validation, les versions de processus, les propositions d’amélioration, l’évaluation des agents et la mesure des blocages issue des événements réels.
+Après un pilote mesuré, ajouter progressivement des processus, outils et équipes. Les extensions possibles comprennent les délégations avec suppléants, la double validation, le raccordement des versions de processus, propositions d’amélioration et évaluations déjà présentes dans le démonstrateur, puis la mesure des blocages issue des événements réels.
 
 Le diagnostic automatique des causes et les recommandations d’organisation demandent leurs propres évaluations. Une corrélation entre attente et retard ne suffit pas à démontrer une cause, et un changement de staffing ne doit pas être appliqué automatiquement à partir d’une suggestion.
 

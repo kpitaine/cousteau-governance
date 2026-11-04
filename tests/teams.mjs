@@ -1,0 +1,18 @@
+import assert from 'node:assert/strict';
+import {getState,resetState,update} from '../dist/modules/store.js';
+import {getTeamScope,getTeamRows,getTeamMetrics,renderTeams,handleTeams} from '../dist/modules/teams.js';
+resetState();let s=getState();
+assert.equal(getTeamScope(s,'h-matthieu').length,s.agents.length,'Director sees full reporting tree');
+assert.deepEqual(new Set(getTeamScope(s,'h-claire').map(a=>a.id)),new Set(['h-claire','h-lea','a-atlas','a-nova']),'Subtree includes indirect people and agents');
+const m=getTeamMetrics(s,'h-matthieu');assert.equal(m.hours,s.agents.reduce((n,a)=>n+a.hours,0));assert.equal(m.agentHours,s.agents.filter(a=>a.type==='agent').reduce((n,a)=>n+a.hours,0));
+const closed=getTeamRows(s,'h-matthieu',{collapsed:['h-claire']});assert(!closed.some(a=>a.id==='a-atlas'));assert(closed.some(a=>a.id==='h-claire'));
+const bots=getTeamRows(s,'h-matthieu',{type:'agent',sort:'hours'});assert(bots.every(a=>a.type==='agent'));assert(bots.every((a,i)=>!i||bots[i-1].hours>=a.hours));
+const quality=getTeamRows(s,'h-matthieu',{sort:'quality'});assert.equal(quality[0].id,'a-sentinel');assert.equal(quality.at(-1).type,'human');
+const cycle=structuredClone(s);cycle.agents.find(a=>a.id==='h-matthieu').manager='Claire Martin';assert.equal(getTeamScope(cycle,'h-matthieu').length,s.agents.length,'Cycles cannot recurse indefinitely');
+const html=renderTeams(s);assert(html.includes('Aucune conversation privée')||html.includes('aucune conversation privée'));assert(!html.includes('undefined'));assert(html.includes('tm-hierarchy-table'));assert(html.includes('Séries hebdomadaires illustratives'));
+let drawer,modal,renderCount=0;const ctx={getState,update,render:()=>renderCount++,closeDrawer:()=>{},drawer:d=>drawer=d,modal:m=>modal=m,navigate:()=>{},toast:()=>{}};
+handleTeams('tm-member',{dataset:{id:'a-atlas'}},ctx);assert(drawer.body.includes('Rapprochement quotidien'));assert(!drawer.body.includes('ws-send'),'No private chat in team member view');
+handleTeams('tm-scope',{dataset:{id:'h-claire'}},ctx);assert(renderTeams(getState()).includes('Claire Martin · Responsable des opérations'));
+update(st=>st.workspace={actorId:'h-julien'},'Test persona switch');assert(renderTeams(getState()).includes('Julien Moreau · Responsable distribution'),'Old team focus resets when viewer changes');
+handleTeams('tm-sort',{dataset:{}},ctx);const fd=new FormData();fd.set('sort','hours');modal.onSubmit(fd);assert(renderCount>0);
+resetState();console.log('Teams tests passed: hierarchy, scopes, cycles, totals, collapse, sort, persona changes and privacy.');

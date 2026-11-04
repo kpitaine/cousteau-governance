@@ -1,6 +1,6 @@
-/* ALTO Govern — local demonstration domain. No external execution or real financial data. */
+/* Cousteau Governance — local demonstration domain. No external execution or real financial data. */
 const STORAGE_KEY = 'alto-govern-demo-v1';
-const VERSION = 1;
+const VERSION = 2;
 const clone = value => JSON.parse(JSON.stringify(value));
 const date = '2026-11-04T09:00:00.000Z';
 const approvedTools = ['Documents internes','Référentiel fonds','Données marché','CRM','Comptabilité','Messagerie interne','Contrôles conformité'];
@@ -77,99 +77,193 @@ const listeners = new Set();
 let sequence = 0;
 const uid = prefix => `${prefix}-${Date.now().toString(36)}-${(++sequence).toString(36)}`;
 const now = () => new Date().toISOString();
+const coreCollections = ['agents','goals','decisions','gaps','processes','policies','runs','audit'];
+export function migrateState(saved) {
+  const next = saved && typeof saved === 'object' && !Array.isArray(saved) ? clone(saved) : {};
+  for (const key of coreCollections) if (!Array.isArray(next[key])) next[key] = clone(seed[key]);
+  next.settings = {...seed.settings, ...(next.settings && typeof next.settings === 'object' && !Array.isArray(next.settings) ? next.settings : {})};
+  next.version = Math.max(Number(next.version) || 0, VERSION);
+  return next;
+}
 function load() {
   try {
     const stored = JSON.parse(globalThis.localStorage?.getItem(STORAGE_KEY) || 'null');
-    if (stored?.version === VERSION && ['agents','goals','decisions','gaps','processes','policies','runs','audit'].every(k=>Array.isArray(stored[k])) && stored.settings) return stored;
-  } catch { /* Private mode, unavailable storage, or corrupt data: start safely. */ }
-  return clone(seed);
+    return migrateState(stored || seed);
+  } catch { return migrateState(seed); }
 }
 let state = load();
 function persist() { try { globalThis.localStorage?.setItem(STORAGE_KEY, JSON.stringify(state)); } catch { /* Current session remains functional. */ } }
-function notify() { for (const callback of listeners) { try { callback(state); } catch (error) { console.error('ALTO Govern render error', error); } } }
+function notify() { for (const callback of listeners) { try { callback(state); } catch (error) { console.error('Cousteau Governance render error', error); } } }
+function person(s, value) {
+  if (!value) return undefined;
+  const needle=String(value).trim().toLowerCase();
+  const exact=s.agents.find(a=>a.id===value||a.name?.toLowerCase()===needle);
+  if(exact)return exact;
+  const first=s.agents.filter(a=>a.name?.split(' ')[0].toLowerCase()===needle);
+  return first.length===1?first[0]:undefined;
+}
+function currentActor(s, actorId) { return person(s,actorId||s.workspace?.actorId||'h-matthieu'); }
+export function canReviewDecision(s,decision,actorId) {
+  const actor=currentActor(s,actorId);
+  if(!actor||actor.type!=='human'||actor.status==='paused')return false;
+  if(!decision.assignedTo)return true;
+  let owner=person(s,decision.assignedTo);const seen=new Set();
+  while(owner?.type==='human'&&!seen.has(owner.id)){
+    if(owner.id===actor.id)return true;
+    seen.add(owner.id);owner=person(s,owner.managerId||owner.manager);
+  }
+  return false;
+}
 export function getState() { return state; }
 export function subscribe(callback) { listeners.add(callback); return ()=>listeners.delete(callback); }
-export function update(mutator, label='Mise à jour', detail='') {
+export function update(mutator, label='Mise à jour', detail='', options={}) {
   const next = clone(state);
   mutator(next);
-  next.version = VERSION;
-  next.audit.unshift({id:uid('audit'),time:now(),actor:'Matthieu Keip',action:String(label),detail:String(detail)});
+  for(const d of next.decisions){
+    if(d.status==='pending'&&!d.processId&&!state.decisions.some(old=>old.id===d.id)){
+      const artifact=decisionArtifact(next,d);
+      if(artifact&&!d.actionSnapshot)d.actionSnapshot=artifactSnapshot(d,artifact);
+      if(!d.actionFingerprint)d.actionFingerprint=standaloneFingerprint(next,d);
+    }
+  }
+  next.version = Math.max(Number(next.version)||0, VERSION);
+  const actor=currentActor(next,options.actorId);
+  next.audit.unshift({id:uid('audit'),time:now(),actor:actor?.name||'Matthieu Keip',actorId:actor?.id||'h-matthieu',action:String(label),detail:String(detail)});
   state = next;
   persist(); notify();
   return {ok:true};
 }
-export function resetState() { state=clone(seed);persist();notify();return {ok:true}; }
+export function resetState() { state=migrateState(seed);persist();notify();return {ok:true}; }
 export function exportState() { return JSON.stringify({...state,exportedAt:now(),notice:'Démonstration locale — données fictives — aucune exécution distante.'},null,2); }
 
 function checkRun(s,p) {
   if (!p) return 'Processus introuvable.';
   if (p.status !== 'live') return 'Ce processus doit être actif pour lancer une simulation.';
-  const actors=p.agentIds.map(id=>s.agents.find(a=>a.id===id));
-  if (!actors.length || actors.some(a=>!a)) return 'Un agent affecté est absent du registre.';
+  const actors=(p.agentIds||[]).map(id=>s.agents.find(a=>a.id===id));
+  if (!actors.length || actors.some(a=>!a||a.type!=='agent')) return 'Un agent affecté est absent du registre.';
   if (actors.some(a=>a.status==='paused')) return 'Un agent est suspendu. Réactivez-le avant toute nouvelle exécution.';
+  if (actors.some(a=>['qualification','testing'].includes(s.capabilities?.profiles?.[a.id]?.stage))) return 'Un agent doit terminer sa qualification avant de participer à une exécution.';
   if (actors.some(a=>Number(a.autonomy)===0)) return 'Un agent est en observation seule : son mandat interdit l’exécution.';
+  if (actors.some(a=>(s.capabilities?.profiles?.[a.id]?.requiredApps||[]).some(id=>!s.capabilities?.connections?.some(c=>c.id===id&&c.status==='connected'&&c.reviewed&&c.testedRevision===c.revision)))) return 'Une connexion requise est absente, révoquée ou doit être testée et approuvée à nouveau.';
   if (actors.some(a=>a.mandate?.expires && new Date(a.mandate.expires+'T23:59:59Z').getTime()<Date.now())) return 'Un mandat est arrivé à échéance. Renouvelez la délégation avant toute exécution.';
   const policies=s.policies.filter(x=>x.enabled);
-  if (policies.some(x=>x.check==='identity'&&x.mode==='block') && actors.some(a=>!s.agents.some(h=>h.type==='human'&&h.name===a.manager))) return 'Politique d’identité : un responsable humain du registre est requis.';
+  if (policies.some(x=>x.check==='identity'&&x.mode==='block') && actors.some(a=>person(s,a.manager)?.type!=='human')) return 'Politique d’identité : un responsable humain du registre est requis.';
   if (policies.some(x=>x.check==='approved-tools'&&x.mode==='block') && actors.some(a=>(a.mandate?.tools||[]).some(t=>!approvedTools.includes(t)))) return 'Politique de données : un outil du mandat ne figure pas dans le catalogue approuvé.';
   if (policies.some(x=>x.check==='budget'&&x.mode==='block') && s.agents.filter(a=>a.type==='agent').reduce((n,a)=>n+Number(a.cost||0),0)>=Number(s.settings.budget)) return 'Budget mensuel atteint : le lancement est bloqué par la politique budgétaire.';
   if (policies.some(x=>x.check==='mandate'&&x.mode==='block') && actors.some(a=>!a.mandate?.mission||!a.mandate?.reviewer)) return 'Le mandat doit préciser la mission et le responsable de revue.';
+  if ((p.steps||[]).some(step=>step.kind==='human'&&person(s,step.actor)?.type!=='human')) return 'Chaque étape humaine doit désigner une personne du registre.';
   return '';
 }
-function fingerprint(s,p) { return JSON.stringify({id:p.id,steps:p.steps,agents:p.agentIds.map(id=>{const a=s.agents.find(a=>a.id===id);return {id,mandate:a?.mandate};})}); }
+function fingerprint(s,p) { return JSON.stringify({id:p.id,steps:p.steps,agents:p.agentIds.map(id=>{const a=s.agents.find(a=>a.id===id);const connections=(s.capabilities?.profiles?.[id]?.requiredApps||[]).map(appId=>{const c=s.capabilities?.connections?.find(c=>c.id===appId);return {id:appId,revision:c?.revision,scopes:c?.scopes};});return {id,mandate:a?.mandate,autonomy:a?.autonomy,status:a?.status,connections};})}); }
+function standaloneContext(s,d){const a=s.agents.find(a=>a.id===d.agentId);return {id:null,status:'live',agentIds:[d.agentId],steps:[],team:a?.team};}
+function decisionArtifact(s,d){return s.workspace?.threads?.[d.agentId]?.find(m=>m.id===d.artifactId)?.artifact;}
+function artifactSnapshot(d,a){return {artifactId:d.artifactId,to:a.to||'',subject:a.subject||'',body:a.text||''};}
+function standaloneFingerprint(s,d){return JSON.stringify({context:fingerprint(s,standaloneContext(s,d)),amount:Number(d.amount||0),action:d.actionSnapshot||null,send:s.workspace?.agentConfig?.[d.agentId]?.permissions?.send});}
+function blocked(action,detail,options={}) { update(()=>{},action,detail,options);return {ok:false,error:detail}; }
+function createCheckpoint(s,run,step,index) {
+  const p=run.definitionSnapshot;
+  const actor=s.agents.find(a=>a.id===p.agentIds[0]);
+  const reviewer=step?.actor||actor.mandate.reviewer;
+  const decisionId=uid('decision');
+  run.status='waiting';run.decisionId=decisionId;
+  if(run.stepStates[index])run.stepStates[index].status='waiting';
+  run.events.push({title:'Décision humaine requise',detail:`${reviewer} · ${step?.name||'Accepter le résultat final'}`,time:now(),status:'waiting',stepIndex:index});
+  s.decisions.unshift({id:decisionId,title:`Valider · ${step?.name||p.name}`,agentId:actor.id,processId:p.id,goalId:p.goalId,type:'approval',priority:'medium',status:'pending',assignedTo:reviewer,summary:`L’exécution simulée de « ${p.name} » attend ${reviewer} pour ${step?.name||'accepter le résultat final'}.`,evidence:['Mandats et politiques vérifiés avant démarrage',`Version du processus figée pour le dossier ${run.id}`,'Aucun outil externe ni ordre réel exécuté'],recommendation:'Examiner les éléments proposés, puis approuver ou refuser cette étape.',createdAt:now(),dueAt:new Date(Date.now()+24*3600e3).toISOString(),amount:0,runId:run.id,stepIndex:index,actionFingerprint:fingerprint(s,p)});
+}
+function advanceLegacyRun(s,run) {
+  const p=run.definitionSnapshot;
+  run.status='running';run.decisionId=null;
+  while(run.cursor<p.steps.length){
+    const step=p.steps[run.cursor];
+    if(step.kind==='human'){createCheckpoint(s,run,step,run.cursor);return;}
+    const time=now();
+    run.stepStates[run.cursor]={...run.stepStates[run.cursor],status:'completed',completedAt:time};
+    run.events.push({title:step.name,detail:`${step.actor} · étape simulée`,time,status:'completed',stepIndex:run.cursor});
+    run.cursor+=1;
+  }
+  if(run.finalReviewRequired&&!run.finalReviewApproved){createCheckpoint(s,run,null,p.steps.length);return;}
+  run.status='completed';run.completedAt=now();
+  run.events.push({title:'Résultat accepté dans le scénario',detail:'Toutes les étapes et validations du dossier sont terminées.',time:run.completedAt,status:'completed'});
+  if(!run.counted){
+    const process=s.processes.find(x=>x.id===p.id);if(process)process.cases=Number(process.cases||0)+1;
+    const actor=s.agents.find(a=>a.id===p.agentIds[0]);if(actor){actor.hours=Number(actor.hours||0)+0.2;if(!run.requiresReview)actor.cost=Number(actor.cost||0)+2;}
+    run.counted=true;
+  }
+}
 export function simulateProcess(id) {
   const p=state.processes.find(p=>p.id===id); const error=checkRun(state,p);
-  if(error) return {ok:false,error};
-  const runId=uid('run'); let decisionId;
+  if(error)return blocked('Lancement de simulation bloqué',`${p?.name||id} · ${error}`);
+  const actors=p.agentIds.map(id=>state.agents.find(a=>a.id===id));
+  const hasHuman=p.steps.some(step=>step.kind==='human');
+  const finalReviewRequired=!hasHuman&&(actors.some(a=>a.autonomy===1||a.status==='pilot')||state.policies.some(x=>x.enabled&&x.mode==='ask'&&['Tous les agents','Tous les processus',p.team].includes(x.scope)));
+  if(!hasHuman&&!finalReviewRequired&&state.policies.some(x=>x.enabled&&x.check==='budget'&&x.mode==='block')&&state.agents.filter(a=>a.type==='agent').reduce((n,a)=>n+Number(a.cost||0),0)+2>Number(state.settings.budget))return blocked('Lancement de simulation bloqué','Le coût simulé de 2 € dépasserait le budget mensuel.');
+  const runId=uid('run');
   update(s=>{
-    const process=s.processes.find(x=>x.id===id);
-    const actors=process.agentIds.map(id=>s.agents.find(a=>a.id===id));
-    const requiresHuman=process.steps.some(step=>step.kind==='human')||actors.some(a=>a.autonomy===1||a.status==='pilot')||s.policies.some(p=>p.enabled&&p.mode==='ask'&&(p.scope==='Tous les agents'||p.scope==='Tous les processus'||p.scope===process.team));
-    const events=[{title:'Simulation lancée',detail:'Jeu de données fictif ; aucun système externe appelé.',time:now(),status:'completed'}];
-    for(const step of process.steps){if(step.kind==='human')break;events.push({title:step.name,detail:`${step.actor} · étape simulée`,time:now(),status:'completed'});}
-    const run={id:runId,processId:id,status:requiresHuman?'waiting':'completed',startedAt:now(),events};
-    if(requiresHuman){
-      decisionId=uid('decision'); run.decisionId=decisionId;
-      const reviewer=process.steps.find(x=>x.kind==='human')?.actor||actors[0].mandate.reviewer;
-      events.push({title:'Décision humaine requise',detail:`${reviewer} doit accepter le résultat proposé.`,time:now(),status:'waiting'});
-      s.decisions.unshift({id:decisionId,title:`Valider · ${process.name}`,agentId:actors[0].id,processId:id,goalId:process.goalId,type:'approval',priority:'medium',status:'pending',summary:`L’exécution simulée a préparé son résultat. ${reviewer} doit l’examiner avant de poursuivre.`,evidence:['Mandats et politiques vérifiés avant démarrage','Étapes préparatoires simulées avec traçabilité','Aucun outil externe ni ordre réel exécuté'],recommendation:'Examiner les éléments proposés, puis approuver ou refuser cette exécution.',createdAt:now(),dueAt:new Date(Date.now()+24*3600e3).toISOString(),amount:0,runId,actionFingerprint:fingerprint(s,process)});
-    }else{
-      events.push({title:'Résultat accepté dans le scénario',detail:'Exécution simulée terminée dans les limites du mandat.',time:now(),status:'completed'});
-      process.cases+=1; actors[0].cost+=2; actors[0].hours+=0.2;
-    }
-    s.runs.unshift(run);
+    const run={id:runId,engine:'legacy-v2',processId:id,status:'running',startedAt:now(),definitionSnapshot:clone(p),cursor:0,stepStates:p.steps.map((step,index)=>({index,title:step.name,actor:step.actor,kind:step.kind,status:'pending'})),finalReviewRequired,finalReviewApproved:false,requiresReview:hasHuman||finalReviewRequired,counted:false,events:[{title:'Simulation lancée',detail:'Jeu de données fictif ; version du processus conservée pour ce dossier.',time:now(),status:'completed'}]};
+    s.runs.unshift(run);advanceLegacyRun(s,run);
   },'Simulation de processus lancée',`${p.name} · ${runId}`);
-  return {ok:true,runId,decisionId};
+  const run=state.runs.find(r=>r.id===runId);
+  return {ok:true,runId,decisionId:run.decisionId||undefined,status:run.status};
 }
-export function decide(id,outcome,comment='') {
-  const normalized={approve:'approved',reject:'rejected',approved:'approved',rejected:'rejected'}[outcome];
+export function decide(id,outcome,comment='',options={}) {
+  const normalized=['approve','approved'].includes(outcome)?'approved':['reject','rejected'].includes(outcome)?'rejected':null;
   if(!normalized)return {ok:false,error:'Décision invalide.'};
   const decision=state.decisions.find(d=>d.id===id);
   if(!decision)return {ok:false,error:'Décision introuvable.'};
   if(decision.status!=='pending')return {ok:false,error:'Cette décision a déjà été traitée.'};
+  const actor=currentActor(state,options.actorId);
+  if(!actor||actor.type!=='human'||actor.status==='paused')return {ok:false,error:'La décision nécessite une identité humaine active du registre.'};
+  if((options.actorId||state.workspace?.actorId)&&!canReviewDecision(state,decision,actor.id))return {ok:false,error:`Cette demande est affectée à ${decision.assignedTo}. Seul ce responsable ou un supérieur humain peut décider ou la réaffecter.`};
+  const hierarchicalOverride=Boolean(decision.assignedTo&&person(state,decision.assignedTo)?.id!==actor.id);
+  const existingRun=state.runs.find(r=>r.id===decision.runId||r.decisionId===decision.id);
+  if(existingRun&&existingRun.engine&&existingRun.engine!=='legacy-v2')return {ok:false,error:'Cette demande doit être traitée par le moteur de son processus.'};
+  if(existingRun&&existingRun.status!=='waiting')return {ok:false,error:'Cette exécution n’attend plus de décision.'};
+  if(existingRun?.engine==='legacy-v2'&&(existingRun.decisionId!==decision.id||decision.stepIndex!==existingRun.cursor))return {ok:false,error:'Cette demande ne correspond plus à l’étape active.'};
   if(normalized==='approved'){
-    const p=state.processes.find(p=>p.id===decision.processId);
-    const error=checkRun(state,p);if(error)return {ok:false,error};
-    if(decision.actionFingerprint&&decision.actionFingerprint!==fingerprint(state,p))return {ok:false,error:'Le mandat ou le processus a changé. Refusez cette demande et relancez une simulation pour examiner la nouvelle action.'};
+    const currentProcess=state.processes.find(p=>p.id===decision.processId);
+    const p=existingRun?.engine==='legacy-v2'?{...existingRun.definitionSnapshot,status:currentProcess?.status}:decision.processId?currentProcess:standaloneContext(state,decision);
+    const error=checkRun(state,p);if(error)return blocked('Reprise d’exécution bloquée',error,{actorId:actor.id});
+    if(decision.actionFingerprint&&decision.actionFingerprint!==(decision.processId?fingerprint(state,p):standaloneFingerprint(state,decision)))return {ok:false,error:'Le mandat ou l’action présentée a changé. Refusez cette demande et relancez une simulation pour examiner la nouvelle action.'};
+    if(decision.artifactId){
+      const artifact=decisionArtifact(state,decision);
+      if(!artifact||JSON.stringify(decision.actionSnapshot)!==JSON.stringify(artifactSnapshot(decision,artifact)))return {ok:false,error:'Le contenu ou les destinataires du brouillon ont changé. Soumettez la nouvelle version à validation.'};
+      if(state.workspace?.agentConfig?.[decision.agentId]?.permissions?.send==='never')return {ok:false,error:'Le mandat de cet agent interdit les communications.'};
+      if(state.policies.some(pol=>pol.enabled&&pol.check==='external-approval'&&pol.mode==='block'&&['Tous les agents','Tous les processus',p.team].includes(pol.scope)))return {ok:false,error:'La politique de l’organisation interdit cet engagement externe.'};
+    }
     const total=state.agents.filter(a=>a.type==='agent').reduce((n,a)=>n+Number(a.cost||0),0);
     if(total+Number(decision.amount||0)>Number(state.settings.budget))return {ok:false,error:'Cette approbation dépasserait le budget mensuel. Révisez d’abord l’enveloppe.'};
   }
+  let nextDecisionId;
   update(s=>{
-    const d=s.decisions.find(x=>x.id===id); d.status=normalized; d.comment=String(comment||'').trim(); d.decidedAt=now();d.decidedBy='Matthieu Keip';
+    const d=s.decisions.find(x=>x.id===id); d.status=normalized;d.comment=String(comment||'').trim();d.decidedAt=now();d.decidedBy=actor.name;d.decidedById=actor.id;d.hierarchicalOverride=hierarchicalOverride;
+    const artifact=decisionArtifact(s,d);if(artifact){artifact.reviewStatus=normalized;artifact.reviewedAt=d.decidedAt;artifact.reviewedBy=actor.name;}
     const run=s.runs.find(r=>r.id===d.runId||r.decisionId===d.id);
-    if(run){run.status=normalized==='approved'?'completed':'rejected';run.events.push({title:normalized==='approved'?'Approuvé par Matthieu Keip':'Refusé par Matthieu Keip',detail:d.comment||'Décision humaine enregistrée dans la démonstration.',time:now(),status:normalized==='approved'?'completed':'rejected'});}
-    if(normalized==='approved'){
-      const p=s.processes.find(p=>p.id===d.processId);if(p)p.cases+=1;
-      const a=s.agents.find(a=>a.id===d.agentId);if(a){a.cost+=Number(d.amount||0);a.hours+=0.2;}
+    if(run){
+      run.events.push({title:`${normalized==='approved'?'Approuvé':'Refusé'} par ${actor.name}`,detail:d.comment||'Décision humaine enregistrée dans la démonstration.',time:now(),status:normalized==='approved'?'completed':'rejected',stepIndex:d.stepIndex});
+      if(run.engine==='legacy-v2'){
+        if(normalized==='rejected'){run.status='rejected';if(run.stepStates[run.cursor])run.stepStates[run.cursor].status='rejected';}
+        else{
+          if(run.cursor<run.definitionSnapshot.steps.length){run.stepStates[run.cursor]={...run.stepStates[run.cursor],status:'completed',completedAt:now(),decidedBy:actor.id};run.cursor+=1;}
+          else run.finalReviewApproved=true;
+          advanceLegacyRun(s,run);nextDecisionId=run.decisionId||undefined;
+        }
+      }else run.status=normalized==='approved'?'completed':'rejected';
     }
-  },normalized==='approved'?'Décision approuvée':'Décision refusée',`${decision.title}${comment?' · '+comment:''}`);
-  return {ok:true};
+    if(normalized==='approved'){
+      if(run&&run.engine!=='legacy-v2'){
+        const p=s.processes.find(p=>p.id===d.processId);if(p)p.cases=Number(p.cases||0)+1;
+        const a=s.agents.find(a=>a.id===d.agentId);if(a)a.hours=Number(a.hours||0)+0.2;
+      }
+      const a=s.agents.find(a=>a.id===d.agentId);if(a)a.cost=Number(a.cost||0)+Number(d.amount||0);
+    }
+  },normalized==='approved'?'Décision approuvée':'Décision refusée',`${decision.title}${hierarchicalOverride?' · arbitrage hiérarchique pour '+decision.assignedTo:''}${comment?' · '+comment:''}`,{actorId:actor.id});
+  return {ok:true,runId:existingRun?.id,decisionId:nextDecisionId,status:existingRun?state.runs.find(r=>r.id===existingRun.id)?.status:undefined};
 }
 export function setAutonomy(agentId,level) {
   const a=state.agents.find(a=>a.id===agentId);level=Number(level);
   if(!a||a.type!=='agent')return {ok:false,error:'Agent introuvable.'};
   if(!Number.isInteger(level)||level<0||level>3)return {ok:false,error:'Le niveau d’autonomie doit être compris entre 0 et 3.'};
-  if(!state.agents.some(h=>h.type==='human'&&h.name===a.manager))return {ok:false,error:'Nommez un responsable humain avant de modifier la délégation.'};
+  if(person(state,a.manager)?.type!=='human')return {ok:false,error:'Nommez un responsable humain avant de modifier la délégation.'};
   update(s=>{s.agents.find(x=>x.id===agentId).autonomy=level;},'Délégation modifiée',`${a.name} · niveau ${a.autonomy} → ${level} · politiques organisationnelles conservées`);
   return {ok:true};
 }

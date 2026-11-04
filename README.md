@@ -1,78 +1,90 @@
 # Cousteau Governance
 
-**Le cap reste humain.** Un cockpit de gouvernance pour organiser des équipes mixtes, déléguer aux agents, arbitrer les exceptions et relier le travail aux objectifs.
+**Le cockpit humain d’une organisation d’agents.** Processus, responsabilités, interventions, compétences et politiques dans deux espaces : **Équipes** et **Gouvernance**.
 
-[Ouvrir l’application déployée](https://alto-govern-matthieu.keip.chatgpt.site) · [Guide produit](docs/product.md) · [Architecture](docs/architecture.md) · [Feuille de route](docs/roadmap.md)
+[Application publique](https://alto-govern-matthieu.keip.chatgpt.site) · [Inventaire Wand OS / Cousteau](docs/wand-feature-parity.md) · [Guide produit](docs/product.md) · [Architecture](docs/architecture.md) · [Feuille de route](docs/roadmap.md)
 
-![Vue d’ensemble de Cousteau Governance](docs/screenshots/01-overview.jpg)
+![Designer de processus Cousteau OS](docs/screenshots/06-os-designer.jpg)
 
-## Ce que contient cette version
+Cette version 2 reprend les parcours observables de la démonstration publique de **Wand OS** (Teams et Governance) dans une interface Cousteau en français. Le code est une réimplémentation indépendante ; aucun code propriétaire Wand n’est inclus. Les marques, textes métier, données et styles ont été adaptés à l’organisation fictive Northstar AM.
 
-Un démonstrateur interactif en français, inspiré des principes de gouvernance de Wand OS, avec une identité et un scénario propres. L’organisation **Northstar AM**, ses dossiers, ses coûts et ses résultats sont fictifs.
+> C’est un démonstrateur interactif persistant dans le navigateur. Temporal et Mastra sont les moteurs cibles, **pas des intégrations actives**. Les données, métriques, modèles, connexions et exécutions sont simulés. Il ne s’agit pas d’une reproduction du backend privé de Wand.
 
-Dix écrans couvrent le pilotage, les objectifs, les décisions, les équipes et agents, les mandats, les points de blocage, les processus, les règles, le journal et les intégrations cibles. Les modifications sont conservées dans le navigateur ; les parcours de création, d’arbitrage et de simulation sont fonctionnels localement.
+## Parcours disponibles
 
-**Temporal et Mastra sont les cibles d’intégration. Ils ne sont pas connectés dans cette version.**
+| Espace | Ce que l’on peut faire |
+| --- | --- |
+| Panneau gauche | Voir les dossiers qui attendent une décision, le responsable, l’état des processus et les objectifs ; ouvrir directement le contexte |
+| Mon équipe | Explorer les sous-équipes, volumes humains/agents, cascades d’objectifs, retards, points d’attention et tableau hiérarchique |
+| Processus | Décrire un résultat, choisir un modèle, modifier phases/étapes/dépendances/branches, affecter un humain ou un agent, comparer et publier des versions |
+| Exécutions | Lancer un dossier ou tester le brouillon, suivre chaque étape, consulter les preuves, approuver/refuser/réaffecter, conserver l’instantané de départ |
+| Agents | Créer ou recruter un profil, qualifier, tester, passer en pilote puis en service, partager et suspendre |
+| Compétences | Définir étapes et cas de tests, publier une version, inscrire et certifier des apprenants humains ou agents |
+| Intégrations | Configurer un périmètre, tester, demander une revue, autoriser ou révoquer une connexion simulée |
+| Objectifs et écarts | Décliner un objectif, éditer les résultats clés, relier les processus, examiner les preuves et traiter les causes proposées |
+| Organisation et transformation | Modifier les rattachements, suivre les phases de transformation et documenter les critères de passage |
+| Politiques et sécurité | Définir blocage/revue/journalisation, tester les contrôles typés, traiter les événements et revoir les accès |
+| Coûts et administration | Examiner budgets et hypothèses de valeur, configurer les rôles, leurs plafonds et le catalogue de modèles |
+| Traçabilité | Consulter les décisions, les changements et leurs motifs ; exporter l’espace et le journal local |
+
+Les différences et limites sont détaillées fonction par fonction dans l’[inventaire de couverture](docs/wand-feature-parity.md). Le nombre d’écrans ne vaut pas preuve d’équivalence opérationnelle.
 
 ## Captures
 
-| Organisation | Décisions |
+| Mon équipe | Exécutions et interventions |
 | --- | --- |
-| ![Équipes et agents](docs/screenshots/02-organization.jpg) | ![Décisions humaines](docs/screenshots/03-decisions.jpg) |
+| ![Mon équipe](docs/screenshots/07-os-teams.jpg) | ![Interventions](docs/screenshots/08-os-runs.jpg) |
 
-| Points de blocage | Processus |
+| Transformation | Compétences |
 | --- | --- |
-| ![Points de blocage](docs/screenshots/04-gaps.jpg) | ![Processus](docs/screenshots/05-processes.jpg) |
+| ![Transformation](docs/screenshots/09-os-transformation.jpg) | ![Compétences](docs/screenshots/10-os-skills.jpg) |
 
 ## Lancer localement
 
-Aucune dépendance d’exécution à installer. Avec Python 3, depuis la racine du projet :
+Aucune dépendance JavaScript externe et aucune compilation.
 
-```sh
+```bash
 python3 -m http.server 4173 --directory dist
 ```
 
-Ouvrir `http://localhost:4173`. Le chargement des modules JavaScript nécessite un serveur HTTP ; l’ouverture directe de `index.html` en `file://` n’est pas prise en charge.
+Ouvrir `http://localhost:4173/`. Le premier écran est le catalogue de processus. Dans le menu gauche, ouvrir **Réponse aux appels d’offres** pour son designer à cinq phases et treize étapes.
 
-## Vérifier le projet
+## Vérifier
 
-Avec une version récente de Node.js :
+Node.js 24 est utilisé dans la CI. Les tests ne contactent aucun service externe.
 
-```sh
-node tests/domain.mjs
-node tests/render.mjs
+```bash
+npm test
 ```
 
-Les tests métier couvrent l’approbation unique, le refus, la suspension, l’expiration et la modification des mandats, les outils interdits, le budget, les actions correctives et la persistance. Les tests de rendu couvrent les huit vues modulaires et l’échappement des contenus saisis. La vérification visuelle et des interactions reste complémentaire.
+Sept suites couvrent les règles métier, rendu et échappement, intégrité du graphe, versions, approbations successives, autorité du responsable, demandes périmées, révocation, qualification, tests/certification des compétences, hiérarchie, politique typée, migration, réinitialisation et espace de travail.
+
+Les captures et parcours testés dans le navigateur sont décrits dans [design-qa.md](design-qa.md).
 
 ## Structure
 
-| Chemin | Contenu |
+| Chemin | Responsabilité |
 | --- | --- |
-| `dist/index.html` | Entrée de l’application |
-| `dist/app.js` | Navigation, tableaux de bord, modales et interactions communes |
-| `dist/modules/store.js` | Scénario, état local, simulations et contrôles prédéfinis |
-| `dist/modules/governance.js` | Objectifs, décisions, blocages et règles |
-| `dist/modules/organization.js` | Organisation, mandats, processus et intégrations cibles |
-| `dist/modules/ui.js` | Composants et échappement HTML |
-| `dist/*.css` | Styles et adaptation aux écrans étroits |
-| `tests/` | Vérifications métier et rendu |
-| `docs/` | Architecture, guide produit, feuille de route et captures |
+| `dist/app.js` | Navigation OS, file d’interventions, recherche et fenêtres |
+| `dist/modules/store.js` | État persistant, socle métier, mandats, décisions et audit local |
+| `dist/modules/teams.js` | Mon équipe, hiérarchie, agrégats et objectifs |
+| `dist/modules/workflows.js`, `workflow-store.js` | Designer, graphe, versions et moteur déterministe de dossiers |
+| `dist/modules/capabilities.js`, `capabilities-store.js` | Agents, compétences, apprentissage et applications |
+| `dist/modules/governance.js`, `governance-plus.js` | Objectifs, écarts, politiques, organisation, transformation et administration |
+| `dist/modules/workspace.js` | Identités de démonstration, sources et interventions ; atelier agent secondaire |
+| `CONTRACT.md` | Contrats cibles de gouvernance, à raccorder côté serveur |
+| `tests/` | Sept suites locales |
+| `docs/` | Documentation, inventaire et captures |
 
-## Déployer
+## Limites opérationnelles
 
-Publier le contenu de `dist/` sur un hébergeur statique. La navigation utilise des fragments d’URL (`#goals`, `#decisions`, etc.) : aucune réécriture serveur n’est nécessaire. Le déploiement Sites existant conserve son URL historique ; son identité figure dans `.openai/hosting.json`.
+- État propre au navigateur, sans backend partagé, authentification ni isolation multi-organisation.
+- Aucun appel LLM, OAuth, envoi de message, ordre financier ou effet externe.
+- Les rôles administrables illustrent un plafond ; ils ne constituent pas un moteur RBAC global. Les contrôles réellement appliqués dans la simulation sont précisés dans l’architecture.
+- Journal modifiable localement ; aucune garantie d’immutabilité, de signature ou de conservation réglementaire.
+- Prévisions, scores d’adéquation, coûts, tests agents et gains sont fictifs et explicitement signalés.
+- La publication d’un processus crée une version locale. Le déploiement de ce site publie l’interface, sans déployer un worker Temporal ou Mastra.
 
-La donnée de démonstration est enregistrée dans le `localStorage` du navigateur. La clé historique `alto-govern-demo-v1` peut être conservée lors d’un renommage pour préserver les sessions existantes. L’export JSON permet de conserver un instantané ; la réinitialisation restaure le scénario initial.
+[Architecture cible Temporal + Mastra](docs/architecture.md) · [Critères d’un pilote opérationnel](docs/roadmap.md)
 
-## Limites à connaître
-
-- Aucune exécution externe, donnée de marché réelle, connexion métier, transaction ou appel de modèle.
-- Aucun backend, aucune authentification propre à l’application, aucun partage d’état entre utilisateurs. Les éventuelles restrictions d’accès de l’hébergement sont distinctes du prototype.
-- Les contrôles dans le navigateur illustrent la gouvernance ; ils ne forment pas une frontière de sécurité.
-- Le journal local est modifiable et réinitialisable. Il n’est ni immuable, ni signé, ni un registre d’audit de production.
-- Seuls les contrôles prédéfinis ont une logique exécutable. Une nouvelle règle rédigée en langage naturel reste déclarative, même si son statut est changé dans l’interface.
-- Les impacts proposés sont estimés ; engager un plan d’action ne transforme pas son bénéfice attendu en résultat acquis.
-- Les contrats Temporal / Mastra présentés et exportés sont illustratifs, sans transport ni connecteur implémenté.
-
-Le passage à un produit opérationnel est décrit dans la [feuille de route](docs/roadmap.md).
+Licence du code original de ce dépôt : [Apache-2.0](LICENSE).

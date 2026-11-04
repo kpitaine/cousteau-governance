@@ -30,3 +30,6 @@ Thumbs.db
 *.tgz
 *.zip
 *.tmp
+
+# Internal implementation notes
+.work/
